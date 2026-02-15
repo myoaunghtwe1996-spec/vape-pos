@@ -3,10 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vape Shop POS - Pro Version</title>
+    <title>Vape Shop POS - Firebase Cloud Sync</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Noto+Sans+Myanmar:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -24,6 +30,48 @@
         .container {
             max-width: 1600px;
             margin: 0 auto;
+        }
+
+        /* Firebase Status Indicator */
+        .firebase-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 999;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #10b981;
+        }
+
+        .status-dot.disconnected {
+            background: #ef4444;
+            animation: none;
+        }
+
+        .status-dot.syncing {
+            background: #f59e0b;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         .header {
@@ -521,7 +569,6 @@
             color: white;
         }
 
-        /* Modal Styles */
         .modal {
             display: none;
             position: fixed;
@@ -625,7 +672,6 @@
             gap: 15px;
         }
 
-        /* Receipt Styles */
         .receipt {
             font-family: 'Courier New', monospace;
             width: 300px;
@@ -677,7 +723,6 @@
             font-size: 12px;
         }
 
-        /* Barcode Scanner Styles */
         #barcodeScanner {
             position: relative;
             width: 100%;
@@ -731,7 +776,6 @@
             font-weight: 600;
         }
 
-        /* Login Screen */
         .login-screen {
             position: fixed;
             top: 0;
@@ -770,7 +814,6 @@
             margin-bottom: 30px;
         }
 
-        /* Inventory Table */
         .inventory-table {
             width: 100%;
             border-collapse: collapse;
@@ -890,6 +933,12 @@
             border: 2px solid #17a2b8;
         }
 
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+
         @media print {
             body * {
                 visibility: hidden;
@@ -927,14 +976,35 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+    <!-- Firebase Status Indicator -->
+    <div class="firebase-status" id="firebaseStatus">
+        <div class="status-dot disconnected" id="statusDot"></div>
+        <span id="statusText">Connecting...</span>
+    </div>
+
     <!-- Login Screen -->
     <div class="login-screen" id="loginScreen">
         <div class="login-box">
             <div class="login-title">🌬️ Vape Shop POS Pro</div>
-            <div class="login-subtitle">ဝင်ရောက်ရန် ဝန်ထမ်း ID နှင့် PIN ထည့်ပါ</div>
+            <div class="login-subtitle">☁️ Cloud Sync Enabled</div>
             <form onsubmit="login(event)">
                 <div class="form-group">
                     <label class="form-label">ဝန်ထမ်း ID</label>
@@ -957,7 +1027,7 @@
     <div class="container" id="mainApp" style="display: none;">
         <!-- Header -->
         <div class="header">
-            <h1>🌬️ Vape Shop POS Pro</h1>
+            <h1>🌬️ Vape Shop POS Pro ☁️</h1>
             <div class="header-stats">
                 <div class="stat-box">
                     <div class="stat-label">ယနေ့ ရောင်းအား</div>
@@ -1066,7 +1136,7 @@
             </div>
         </div>
 
-        <!-- Inventory Tab -->
+        <!-- Other tabs remain the same structure as before -->
         <div class="tab-content" id="inventoryContent">
             <div class="products-section">
                 <div class="section-title">
@@ -1076,7 +1146,6 @@
             </div>
         </div>
 
-        <!-- History Tab -->
         <div class="tab-content" id="historyContent">
             <div class="products-section">
                 <div class="section-title">
@@ -1089,7 +1158,6 @@
             </div>
         </div>
 
-        <!-- Reports Tab -->
         <div class="tab-content" id="reportsContent">
             <div class="report-section">
                 <div class="section-title">
@@ -1136,7 +1204,6 @@
             </div>
         </div>
 
-        <!-- Audit Log Tab -->
         <div class="tab-content" id="auditContent">
             <div class="products-section">
                 <div class="section-title">
@@ -1146,7 +1213,7 @@
                     </button>
                 </div>
                 <div class="alert alert-info">
-                    ဝန်ထမ်းများ၏ လုပ်ဆောင်ချက်များကို ဤနေရာတွင် မှတ်တမ်းတင်ထားပါသည်။ ဤအချက်အလက်များသည် လုံခြုံရေး စစ်ဆေးရန် အတွက် အသုံးပြုပါသည်။
+                    ဝန်ထမ်းများ၏ လုပ်ဆောင်ချက်များကို ဤနေရာတွင် မှတ်တမ်းတင်ထားပါသည်။ ☁️ Cloud Sync Enabled
                 </div>
                 <div id="auditList"></div>
             </div>
@@ -1190,7 +1257,7 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">ပစ္စည်း ရောင်းဈေးတန် (MMK)</label>
+                    <label class="form-label">ပစ္စည်း ဝယ်ဈေး (MMK)</label>
                     <input type="number" class="form-input" id="productCost">
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">
@@ -1238,7 +1305,64 @@
     </div>
 
     <script>
-        // Data Storage
+        // ====================================
+        // FIREBASE CONFIGURATION
+        // ====================================
+        
+        // ✅ Firebase Configuration - READY!
+        const firebaseConfig = {
+            apiKey: "AIzaSyBloTgt5rE2FMxAH3C3sq3YqK6tMnzgldo",
+            authDomain: "vape-pos-myanmar.firebaseapp.com",
+            databaseURL: "https://vape-pos-myanmar-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "vape-pos-myanmar",
+            storageBucket: "vape-pos-myanmar.firebasestorage.app",
+            messagingSenderId: "535582496813",
+            appId: "1:535582496813:web:bf3030b940b009a1da00a4"
+        };
+
+        // Check if Firebase is configured
+        const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
+
+        let db = null;
+        let firebaseConnected = false;
+
+        // Initialize Firebase
+        if (isFirebaseConfigured) {
+            try {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.database();
+                
+                // Monitor connection
+                const connectedRef = db.ref(".info/connected");
+                connectedRef.on("value", (snap) => {
+                    if (snap.val() === true) {
+                        updateFirebaseStatus('connected', '☁️ Cloud Connected');
+                        firebaseConnected = true;
+                    } else {
+                        updateFirebaseStatus('disconnected', '❌ Offline');
+                        firebaseConnected = false;
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase initialization error:", error);
+                updateFirebaseStatus('disconnected', '❌ Config Error');
+            }
+        } else {
+            updateFirebaseStatus('disconnected', '⚠️ Not Configured');
+        }
+
+        // Update Firebase Status UI
+        function updateFirebaseStatus(status, text) {
+            const dot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            
+            dot.className = `status-dot ${status}`;
+            statusText.textContent = text;
+        }
+
+        // ====================================
+        // DATA VARIABLES
+        // ====================================
         let products = [];
         let cart = [];
         let sales = [];
@@ -1256,7 +1380,93 @@
             { id: 'staff2', pin: '2222', name: 'Staff 2', role: 'staff' }
         ];
 
-        // Login
+        // ====================================
+        // FIREBASE SYNC FUNCTIONS
+        // ====================================
+
+        // Sync Products to Firebase
+        function syncProductsToFirebase() {
+            if (!firebaseConnected || !db) return;
+            
+            updateFirebaseStatus('syncing', '⚡ Syncing...');
+            db.ref('products').set(products)
+                .then(() => {
+                    updateFirebaseStatus('connected', '☁️ Cloud Connected');
+                })
+                .catch((error) => {
+                    console.error("Error syncing products:", error);
+                });
+        }
+
+        // Sync Sales to Firebase
+        function syncSalesToFirebase() {
+            if (!firebaseConnected || !db) return;
+            
+            updateFirebaseStatus('syncing', '⚡ Syncing...');
+            db.ref('sales').set(sales)
+                .then(() => {
+                    updateFirebaseStatus('connected', '☁️ Cloud Connected');
+                })
+                .catch((error) => {
+                    console.error("Error syncing sales:", error);
+                });
+        }
+
+        // Sync Audit Log to Firebase
+        function syncAuditToFirebase() {
+            if (!firebaseConnected || !db) return;
+            
+            db.ref('auditLog').set(auditLog)
+                .catch((error) => {
+                    console.error("Error syncing audit:", error);
+                });
+        }
+
+        // Load Products from Firebase
+        function loadProductsFromFirebase() {
+            if (!db) return;
+            
+            db.ref('products').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    products = data;
+                    renderProducts();
+                    renderInventory();
+                }
+            });
+        }
+
+        // Load Sales from Firebase
+        function loadSalesFromFirebase() {
+            if (!db) return;
+            
+            db.ref('sales').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    sales = data;
+                    renderHistory();
+                    updateHeaderStats();
+                }
+            });
+        }
+
+        // Load Audit Log from Firebase
+        function loadAuditFromFirebase() {
+            if (!db) return;
+            
+            db.ref('auditLog').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    auditLog = data;
+                    renderAuditLog();
+                }
+            });
+        }
+
+        // ====================================
+        // AUTHENTICATION
+        // ====================================
+
         function login(event) {
             event.preventDefault();
             const userId = document.getElementById('loginId').value;
@@ -1277,7 +1487,6 @@
             }
         }
 
-        // Logout
         function logout() {
             if (confirm('Logout လုပ်မှာ သေချာပါသလား?')) {
                 addAuditLog('LOGOUT', `User ${currentUser.name} logged out`);
@@ -1302,12 +1511,24 @@
                 data: data
             };
             auditLog.push(log);
-            saveData();
+            syncAuditToFirebase();
         }
 
-        // Initialize
+        // ====================================
+        // INITIALIZATION
+        // ====================================
+
         function init() {
-            loadData();
+            if (isFirebaseConfigured) {
+                // Load from Firebase (real-time sync)
+                loadProductsFromFirebase();
+                loadSalesFromFirebase();
+                loadAuditFromFirebase();
+            } else {
+                // Fallback to LocalStorage
+                loadDataFromLocalStorage();
+            }
+            
             renderProducts();
             renderInventory();
             renderHistory();
@@ -1330,16 +1551,16 @@
             }
         }
 
-        // Load Data from LocalStorage
-        function loadData() {
-            const savedProducts = localStorage.getItem('vape_products');
-            const savedSales = localStorage.getItem('vape_sales');
-            const savedAuditLog = localStorage.getItem('vape_audit_log');
+        // Load from LocalStorage (fallback)
+        function loadDataFromLocalStorage() {
+            const savedProducts = localStorage.getItem('vape_products_firebase');
+            const savedSales = localStorage.getItem('vape_sales_firebase');
+            const savedAudit = localStorage.getItem('vape_audit_firebase');
             
             if (savedProducts) {
                 products = JSON.parse(savedProducts);
             } else {
-                // Default Products
+                // Default products
                 products = [
                     { id: 1, barcode: '8901234567890', name: 'RELX Infinity', category: 'Device', brand: 'RELX', price: 45000, stock: 15, cost: 35000 },
                     { id: 2, barcode: '8901234567891', name: 'RELX Pod Classic Tobacco', category: 'Pod', brand: 'RELX', price: 18000, stock: 50, cost: 14000 },
@@ -1348,45 +1569,34 @@
                     { id: 5, barcode: '8901234567894', name: 'TEREA Heets Amber', category: 'Heets', brand: 'IQOS', price: 25000, stock: 60, cost: 20000 },
                     { id: 6, barcode: '8901234567895', name: 'VUSE ePod 2', category: 'Device', brand: 'VUSE', price: 38000, stock: 12, cost: 30000 }
                 ];
-                saveData();
+                saveDataToLocalStorage();
+                
+                // Also sync to Firebase if configured
+                if (isFirebaseConfigured) {
+                    syncProductsToFirebase();
+                }
             }
             
             if (savedSales) {
                 sales = JSON.parse(savedSales);
             }
-
-            if (savedAuditLog) {
-                auditLog = JSON.parse(savedAuditLog);
+            
+            if (savedAudit) {
+                auditLog = JSON.parse(savedAudit);
             }
         }
 
-        // Save Data to LocalStorage
-        function saveData() {
-            localStorage.setItem('vape_products', JSON.stringify(products));
-            localStorage.setItem('vape_sales', JSON.stringify(sales));
-            localStorage.setItem('vape_audit_log', JSON.stringify(auditLog));
+        // Save to LocalStorage (fallback)
+        function saveDataToLocalStorage() {
+            localStorage.setItem('vape_products_firebase', JSON.stringify(products));
+            localStorage.setItem('vape_sales_firebase', JSON.stringify(sales));
+            localStorage.setItem('vape_audit_firebase', JSON.stringify(auditLog));
         }
 
-        // Switch Tabs
-        function switchTab(tab) {
-            // Hide all tabs
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
-            // Show selected tab
-            document.getElementById(tab + 'Tab').classList.add('active');
-            document.getElementById(tab + 'Content').classList.add('active');
-            
-            // Refresh content
-            if (tab === 'inventory') renderInventory();
-            if (tab === 'history') renderHistory();
-            if (tab === 'reports') filterReports();
-            if (tab === 'audit') renderAuditLog();
+        // ====================================
+        // PRODUCT FUNCTIONS
+        // ====================================
 
-            addAuditLog('NAVIGATION', `Switched to ${tab} tab`);
-        }
-
-        // Render Products
         function renderProducts() {
             const grid = document.getElementById('productGrid');
             grid.innerHTML = products.map(p => `
@@ -1407,7 +1617,6 @@
             `).join('');
         }
 
-        // Add to Cart
         function addToCart(productId) {
             const product = products.find(p => p.id === productId);
             if (!product || product.stock === 0) {
@@ -1431,7 +1640,6 @@
             updateCart();
         }
 
-        // Update Cart
         function updateCart() {
             const cartDiv = document.getElementById('cartItems');
             
@@ -1465,7 +1673,6 @@
                 </div>
             `).join('');
 
-            // Calculate totals
             const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
             let discountAmount = 0;
             
@@ -1483,7 +1690,6 @@
             document.getElementById('total').textContent = formatMoney(total);
         }
 
-        // Update Quantity
         function updateQty(productId, change) {
             const item = cart.find(i => i.id === productId);
             const product = products.find(p => p.id === productId);
@@ -1500,7 +1706,6 @@
             }
         }
 
-        // Remove from Cart
         function removeFromCart(productId) {
             const item = cart.find(i => i.id === productId);
             if (item) {
@@ -1510,7 +1715,6 @@
             updateCart();
         }
 
-        // Clear Cart
         function clearCart() {
             if (cart.length > 0 && confirm('စျေးခြင်းတောင်းကို ရှင်းလင်းမှာ သေချာပါသလား?')) {
                 addAuditLog('CLEAR_CART', 'Cart cleared', { items: cart.length });
@@ -1519,7 +1723,6 @@
             }
         }
 
-        // Set Discount Type
         function setDiscountType(type) {
             currentDiscount.type = type;
             document.querySelectorAll('.discount-option').forEach(opt => {
@@ -1529,7 +1732,6 @@
             updateCart();
         }
 
-        // Select Payment Method
         function selectPayment(method) {
             currentPayment = method;
             document.querySelectorAll('.payment-btn').forEach(btn => {
@@ -1538,7 +1740,6 @@
             event.target.classList.add('active');
         }
 
-        // Checkout
         function checkout() {
             if (cart.length === 0) {
                 alert('ကျေးဇူးပြု၍ ပစ္စည်းများ ရွေးချယ်ပါ!');
@@ -1557,11 +1758,8 @@
             }
 
             const total = Math.max(0, subtotal - discountAmount);
-
-            // Generate invoice number
             const invoiceNo = 'INV-' + Date.now();
 
-            // Create sale record
             const sale = {
                 invoiceNo,
                 date: new Date().toISOString(),
@@ -1590,10 +1788,8 @@
                 }
             });
 
-            // Save sale
             sales.push(sale);
             
-            // Add audit log
             addAuditLog('SALE_COMPLETED', `Sale ${invoiceNo} completed`, {
                 invoiceNo,
                 total,
@@ -1602,12 +1798,15 @@
                 payment: currentPayment
             });
 
-            saveData();
+            // Sync to Firebase
+            if (isFirebaseConfigured) {
+                syncProductsToFirebase();
+                syncSalesToFirebase();
+            } else {
+                saveDataToLocalStorage();
+            }
 
-            // Store receipt data
             lastReceiptData = sale;
-
-            // Show receipt
             showReceipt(sale);
 
             // Clear cart
@@ -1616,7 +1815,6 @@
             document.getElementById('discountInput').value = '0';
             currentPayment = 'cash';
             
-            // Reset payment selection
             document.querySelectorAll('.payment-btn').forEach((btn, idx) => {
                 btn.classList.toggle('active', idx === 0);
             });
@@ -1626,13 +1824,13 @@
             renderProducts();
         }
 
-        // Show Receipt
         function showReceipt(sale) {
             const receiptContent = document.getElementById('receiptContent');
             receiptContent.innerHTML = `
                 <div class="receipt">
                     <div class="receipt-header">
                         <div class="receipt-title">🌬️ VAPE SHOP POS</div>
+                        <div>☁️ Cloud Sync Enabled</div>
                         <div>Invoice: ${sale.invoiceNo}</div>
                         <div>${new Date(sale.date).toLocaleString('en-GB')}</div>
                         <div>Cashier: ${sale.cashier}</div>
@@ -1679,7 +1877,7 @@
                     <div class="receipt-footer">
                         <div>ကျေးဇူးတင်ပါသည်!</div>
                         <div>Thank You!</div>
-                        <div style="margin-top: 10px;">www.vapeshop.com</div>
+                        <div style="margin-top: 10px;">Powered by Firebase</div>
                     </div>
                 </div>
             `;
@@ -1687,17 +1885,15 @@
             document.getElementById('receiptModal').classList.add('active');
         }
 
-        // Close Receipt Modal
         function closeReceiptModal() {
             document.getElementById('receiptModal').classList.remove('active');
         }
 
-        // Print Receipt
         function printReceipt() {
             window.print();
         }
 
-        // Open Add Product Modal
+        // Product Management Functions
         function openAddProductModal() {
             editingProductId = null;
             document.getElementById('productModalTitle').textContent = 'ပစ္စည်းအသစ်ထည့်ရန်';
@@ -1711,7 +1907,6 @@
             document.getElementById('productModal').classList.add('active');
         }
 
-        // Edit Product
         function editProduct(productId) {
             const product = products.find(p => p.id === productId);
             if (!product) return;
@@ -1728,19 +1923,23 @@
             document.getElementById('productModal').classList.add('active');
         }
 
-        // Delete Product
         function deleteProduct(productId) {
             const product = products.find(p => p.id === productId);
             if (confirm('ဤပစ္စည်းကို ဖျက်မှာ သေချာပါသလား?')) {
                 products = products.filter(p => p.id !== productId);
                 addAuditLog('DELETE_PRODUCT', `Deleted product: ${product.name}`, { productId, product });
-                saveData();
+                
+                if (isFirebaseConfigured) {
+                    syncProductsToFirebase();
+                } else {
+                    saveDataToLocalStorage();
+                }
+                
                 renderProducts();
                 renderInventory();
             }
         }
 
-        // Save Product
         function saveProduct(event) {
             event.preventDefault();
 
@@ -1755,43 +1954,43 @@
             };
 
             if (editingProductId) {
-                // Update existing product
                 const product = products.find(p => p.id === editingProductId);
                 const oldData = {...product};
                 Object.assign(product, productData);
                 addAuditLog('UPDATE_PRODUCT', `Updated product: ${productData.name}`, { productId: editingProductId, oldData, newData: productData });
             } else {
-                // Add new product
                 const newId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
                 products.push({ id: newId, ...productData });
                 addAuditLog('ADD_PRODUCT', `Added new product: ${productData.name}`, { productId: newId, productData });
             }
 
-            saveData();
+            if (isFirebaseConfigured) {
+                syncProductsToFirebase();
+            } else {
+                saveDataToLocalStorage();
+            }
+            
             renderProducts();
             renderInventory();
             closeProductModal();
         }
 
-        // Close Product Modal
         function closeProductModal() {
             document.getElementById('productModal').classList.remove('active');
         }
 
-        // Open Barcode Scanner
+        // Barcode Scanner Functions
         function openBarcodeScanner() {
             document.getElementById('scannerModal').classList.add('active');
             document.getElementById('manualBarcodeInput').value = '';
             startBarcodeScanner();
         }
 
-        // Close Barcode Scanner
         function closeBarcodeScanner() {
             document.getElementById('scannerModal').classList.remove('active');
             stopBarcodeScanner();
         }
 
-        // Start Barcode Scanner
         let scannerActive = false;
         function startBarcodeScanner() {
             if (scannerActive) return;
@@ -1825,7 +2024,6 @@
             });
         }
 
-        // Stop Barcode Scanner
         function stopBarcodeScanner() {
             if (scannerActive) {
                 Quagga.stop();
@@ -1833,7 +2031,6 @@
             }
         }
 
-        // Manual Barcode Search
         function manualBarcodeSearch() {
             const barcode = document.getElementById('manualBarcodeInput').value.trim();
             if (barcode) {
@@ -1842,7 +2039,6 @@
             }
         }
 
-        // Process Barcode Search
         function processBarcodeSearch(barcode) {
             const product = products.find(p => p.barcode === barcode);
             if (product) {
@@ -1856,7 +2052,7 @@
             }
         }
 
-        // Render Inventory
+        // Render Functions
         function renderInventory() {
             const list = document.getElementById('inventoryList');
             list.innerHTML = `
@@ -1899,7 +2095,6 @@
             `;
         }
 
-        // Render History
         function renderHistory() {
             const list = document.getElementById('historyList');
             const sortedSales = [...sales].reverse();
@@ -1946,7 +2141,6 @@
             `;
         }
 
-        // Render Audit Log
         function renderAuditLog() {
             const list = document.getElementById('auditList');
             const sortedLog = [...auditLog].reverse();
@@ -1982,7 +2176,23 @@
             `;
         }
 
-        // Filter Reports
+        // Tab Switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            document.getElementById(tab + 'Tab').classList.add('active');
+            document.getElementById(tab + 'Content').classList.add('active');
+            
+            if (tab === 'inventory') renderInventory();
+            if (tab === 'history') renderHistory();
+            if (tab === 'reports') filterReports();
+            if (tab === 'audit') renderAuditLog();
+
+            addAuditLog('NAVIGATION', `Switched to ${tab} tab`);
+        }
+
+        // Report Functions
         function filterReports() {
             const fromDate = new Date(document.getElementById('reportFromDate').value);
             const toDate = new Date(document.getElementById('reportToDate').value);
@@ -2002,7 +2212,6 @@
             document.getElementById('reportAvgSale').textContent = formatMoney(avgSale);
             document.getElementById('reportTotalDiscount').textContent = formatMoney(totalDiscount);
 
-            // Detailed breakdown
             const details = document.getElementById('reportDetails');
             details.innerHTML = `
                 <h3 style="margin-top: 30px; margin-bottom: 15px;">Sales Breakdown</h3>
@@ -2029,7 +2238,6 @@
             `;
         }
 
-        // Group sales by date
         function groupSalesByDate(salesList) {
             const grouped = {};
             
@@ -2048,7 +2256,7 @@
             })).sort((a, b) => new Date(b.date.split('/').reverse()) - new Date(a.date.split('/').reverse()));
         }
 
-        // Export History to Excel
+        // Export Functions
         function exportHistoryToExcel() {
             const data = sales.map(s => ({
                 'Invoice': s.invoiceNo,
@@ -2070,7 +2278,6 @@
             addAuditLog('EXPORT', 'Exported sales history to Excel');
         }
 
-        // Export Report to Excel
         function exportReportToExcel() {
             const fromDate = document.getElementById('reportFromDate').value;
             const toDate = document.getElementById('reportToDate').value;
@@ -2094,7 +2301,6 @@
                 'Payment Method': getPaymentMethodName(s.payment)
             }));
 
-            // Add summary
             const summary = [{
                 'Invoice': 'SUMMARY',
                 'Total': filteredSales.reduce((sum, s) => sum + s.total, 0),
@@ -2109,7 +2315,6 @@
             addAuditLog('EXPORT', `Exported sales report (${fromDate} to ${toDate})`);
         }
 
-        // Export Audit Log to Excel
         function exportAuditToExcel() {
             const data = auditLog.map(log => ({
                 'Timestamp': new Date(log.timestamp).toLocaleString('en-GB'),
@@ -2127,7 +2332,7 @@
             addAuditLog('EXPORT', 'Exported audit log to Excel');
         }
 
-        // Update Header Stats
+        // Utility Functions
         function updateHeaderStats() {
             const today = new Date().toDateString();
             const todaySales = sales.filter(s => new Date(s.date).toDateString() === today);
@@ -2137,12 +2342,10 @@
             document.getElementById('todayTransactions').textContent = todaySales.length;
         }
 
-        // Format Money
         function formatMoney(amount) {
             return new Intl.NumberFormat('en-US').format(Math.round(amount)) + ' MMK';
         }
 
-        // Get Payment Method Name
         function getPaymentMethodName(method) {
             const names = {
                 'cash': 'Cash',
@@ -2154,7 +2357,7 @@
             return names[method] || method;
         }
 
-        // Search Products
+        // Event Listeners
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
             if (searchInput) {
@@ -2169,7 +2372,6 @@
                 });
             }
 
-            // Keyboard shortcuts
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'F9') {
                     e.preventDefault();
@@ -2179,7 +2381,6 @@
                 }
             });
 
-            // Manual barcode input enter key
             const manualInput = document.getElementById('manualBarcodeInput');
             if (manualInput) {
                 manualInput.addEventListener('keypress', function(e) {
